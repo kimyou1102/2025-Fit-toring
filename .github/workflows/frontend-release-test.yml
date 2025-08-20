@@ -6,12 +6,14 @@ on:
       - release-test # release-test 브랜치로 push/merge될 때 트리거
     paths:
       - 'frontend/**'
+      - '.github/workflows/release.yml'
 
   pull_request: # <-- PR이 열리거나 업데이트될 때 트리거
     branches:
       - release-test # release-test 브랜치를 대상으로 하는 PR
     paths:
       - 'frontend/**'
+      - '.github/workflows/release.yml'
 jobs:
   Vitest:
     runs-on: ubuntu-latest
