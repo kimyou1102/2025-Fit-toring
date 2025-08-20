@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - release-test # release-test 브랜치로 push/merge될 때 트리거
+
+  pull_request: # <-- PR이 열리거나 업데이트될 때 트리거
+    branches:
+      - release-test # release-test 브랜치를 대상으로 하는 PR
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          # semantic-release가 모든 커밋 이력을 분석할 수 있도록 fetch-depth를 0으로 설정
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20' # 안정적인 Node.js 버전 20으로 설정 (22는 아직 실험적)
+
+      - name: Install dependencies
+        # package-lock.json이 없을 때 npm ci 오류 방지를 위해 npm install 사용
+        # 프로덕션/릴리스 워크플로우에서는 npm ci가 더 권장되나,
+        # 연습용으로 package-lock.json 생성을 위해 npm install 사용
+        run: npm install
+
+      - name: Run semantic-release
+        # 릴리스는 push 이벤트 (PR 머지) 시에만 실행되도록 조건부 설정
+        if: github.event_name == 'push' && github.ref == 'refs/heads/release-test'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }} # GitHub Actions Secrets에서 토큰 사용
+          # NPM_TOKEN: ${{ secrets.NPM_TOKEN }} # npm 배포 시 필요한 경우 주석 해제
+        run: npm run release
