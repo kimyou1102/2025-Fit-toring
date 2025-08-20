@@ -1,0 +1,73 @@
+name: Automatic Release on Tag
+
+on:
+  push:
+    tags:
+      - 'v*.*.*' # 'v'로 시작하고 점(.)으로 구분된 버전 태그가 푸시될 때 워크플로우를 실행합니다.
+
+jobs:
+  create_release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 릴리스를 생성하기 위한 쓰기 권한이 필요합니다.
+
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 모든 커밋 내역과 태그를 가져와야 이전 태그를 찾을 수 있습니다.
+
+      - name: 🏷️ Get previous tag
+        id: get_previous_tag
+        run: |
+          # 현재 태그 이름을 가져옵니다.
+          current_tag="${{ github.ref_name }}"
+
+          # 현재 태그를 제외한 모든 태그를 날짜 순으로 정렬하여 마지막 태그를 가져옵니다.
+          previous_tag=$(git tag --sort=-committerdate | grep -v "$current_tag" | head -n 1)
+
+          # 이전 태그가 없으면 "first-commit"이라는 가상의 태그를 사용합니다.
+          if [ -z "$previous_tag" ]; then
+            previous_tag="first-commit"
+          fi
+
+          # 다음 단계에서 사용할 수 있도록 이전 태그를 출력합니다.
+          echo "Previous tag: $previous_tag"
+          echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
+
+      - name: 📝 Generate release body from commit messages
+        id: generate_body
+        run: |
+          # 이전 태그와 현재 태그 사이의 커밋 메시지들을 가져옵니다.
+          # - `--pretty=format:%s%n` 는 제목(summary)만 가져옵니다.
+          # - `--no-merges` 는 머지 커밋을 제외합니다.
+          commit_messages=$(git log --pretty=format:'- %s' --no-merges "${{ steps.get_previous_tag.outputs.previous_tag }}".."${{ github.ref_name }}")
+
+          # 릴리스 바디의 기본 제목을 설정합니다.
+          release_body="### ✨ Changes\n"
+
+          # 커밋 메시지가 비어있지 않으면 릴리스 바디에 추가합니다.
+          if [ -n "$commit_messages" ]; then
+            release_body="$release_body$commit_messages"
+          else
+            release_body="$release_body- No significant changes."
+          fi
+
+          # 다음 단계에서 사용할 수 있도록 릴리스 바디를 출력합니다.
+          echo "release_body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$release_body" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          # 현재 푸시된 태그 이름을 릴리스의 태그로 사용합니다.
+          tag_name: ${{ github.ref_name }}
+          # 릴리스의 제목을 태그 이름과 동일하게 설정합니다.
+          name: Release ${{ github.ref_name }}
+          # 이전 단계에서 생성한 동적 릴리스 바디를 사용합니다.
+          body: ${{ steps.generate_body.outputs.release_body }}
+          draft: false # 초안(draft)이 아닌 정식 릴리스로 발행합니다.
+          prerelease: false # 프리릴리스 여부
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
